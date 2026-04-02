@@ -245,21 +245,25 @@ async function deleteBill(req, res) {
 async function getBills(req, res) {
   try {
     const filters = buildBillFilters(req.query, req.userId);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const total = await Bill.countDocuments(filters);
 
     const bills = await Bill.find(filters)
       .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .populate("sectionId", "sectionName");
 
-    console.log("Retrieved bills count:", bills.length);
-    const billsWithImages = bills.filter((b) => b.imageUrl);
-    console.log(
-      "Bills with images:",
-      billsWithImages.length,
-      billsWithImages.map((b) => ({ id: b._id, imageUrl: b.imageUrl })),
-    );
-
     const withInterest = attachInterest(bills);
-    res.json(withInterest);
+    res.json({
+      bills: withInterest,
+      total,
+      page,
+      pages: Math.ceil(total / limit) || 1
+    });
   } catch (err) {
     console.error("Get bills error:", err.message);
     res.status(500).json({ message: "Server error" });
@@ -270,13 +274,25 @@ async function getPendingBills(req, res) {
   try {
     const baseFilters = buildBillFilters(req.query, req.userId);
     baseFilters.status = { $in: ["unpaid", "partial_paid"] };
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const total = await Bill.countDocuments(baseFilters);
 
     const bills = await Bill.find(baseFilters)
       .sort({ billDate: 1 })
+      .skip(skip)
+      .limit(limit)
       .populate("sectionId", "sectionName");
 
     const withInterest = attachInterest(bills);
-    res.json(withInterest);
+    res.json({
+      bills: withInterest,
+      total,
+      page,
+      pages: Math.ceil(total / limit) || 1
+    });
   } catch (err) {
     console.error("Get pending bills error:", err.message);
     res.status(500).json({ message: "Server error" });
@@ -285,12 +301,19 @@ async function getPendingBills(req, res) {
 
 async function getDashboardSummary(req, res) {
   try {
-    const bills = await Bill.find({ userId: req.userId });
+    const bills = await Bill.find({ userId: req.userId }).populate("sectionId", "sectionName");
 
     let totalPrincipal = 0;
     let totalInterest = 0;
     let totalPaid = 0;
     let totalPending = 0;
+    let pendingInterest = 0;
+
+    const trendMap = new Map();
+    const sectionMap = new Map();
+    let paidAmountTotal = 0;
+    let unpaidAmountTotal = 0;
+    const billsWithInterest = [];
 
     const now = new Date();
 
@@ -302,20 +325,65 @@ async function getDashboardSummary(req, res) {
       const paidAmt = Number(bill.paidAmount) || 0;
       if (bill.status === "paid") {
         totalPaid += total;
+        paidAmountTotal += total;
       } else if (bill.status === "partial_paid") {
         totalPaid += paidAmt;
         totalPending += Math.max(0, total - paidAmt);
+        paidAmountTotal += paidAmt;
+        unpaidAmountTotal += Math.max(0, total - paidAmt);
+        if (bill.interestEnabled) pendingInterest += interest;
       } else {
         totalPending += total;
+        unpaidAmountTotal += total;
+        if (bill.interestEnabled) pendingInterest += interest;
+      }
+
+      // Collect trend data
+      const bDateKey = bill.billDate ? bill.billDate.toISOString().slice(0, 10) : "Unknown";
+      const currentTrend = trendMap.get(bDateKey) || { date: bDateKey, total: 0 };
+      currentTrend.total += total;
+      trendMap.set(bDateKey, currentTrend);
+
+      // Collect section data
+      const bSecKey = bill.sectionId?.sectionName || "Other";
+      const currentSec = sectionMap.get(bSecKey) || { section: bSecKey, total: 0 };
+      currentSec.total += total;
+      sectionMap.set(bSecKey, currentSec);
+
+      // Collect bills with interest table
+      if (bill.interestEnabled) {
+        billsWithInterest.push({
+          title: bill.title,
+          section: bill.sectionId?.sectionName || "—",
+          principal: bill.amount || 0,
+          interest: interest,
+          total: total
+        });
       }
     });
 
+    const trendData = Array.from(trendMap.values()).sort((a, b) => (a.date > b.date ? 1 : -1));
+    const sectionData = Array.from(sectionMap.values()).sort((a, b) => b.total - a.total);
+    const paidVsUnpaidData = [
+      { name: "Paid", value: Number(paidAmountTotal.toFixed(2)) },
+      { name: "Unpaid", value: Number(unpaidAmountTotal.toFixed(2)) }
+    ];
+
     res.json({
-      totalPrincipal: Number(totalPrincipal.toFixed(2)),
-      totalInterest: Number(totalInterest.toFixed(2)),
-      totalPaid: Number(totalPaid.toFixed(2)),
-      totalPending: Number(totalPending.toFixed(2)),
-      totalBillsCount: bills.length,
+      summary: {
+        totalPrincipal: Number(totalPrincipal.toFixed(2)),
+        totalInterest: Number(totalInterest.toFixed(2)),
+        totalPaid: Number(totalPaid.toFixed(2)),
+        totalPending: Number(totalPending.toFixed(2)),
+        totalBillsCount: bills.length,
+        pendingInterest: Number(pendingInterest.toFixed(2))
+      },
+      charts: {
+        trendData,
+        sectionData,
+        paidVsUnpaidData,
+        billsWithInterest
+      }
     });
   } catch (err) {
     console.error("Dashboard summary error:", err.message);

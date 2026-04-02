@@ -20,90 +20,24 @@ const PIE_COLORS = ["#22c55e", "#ef4444"];
 
 export function DashboardPage() {
   const [summary, setSummary] = useState(null);
-  const [bills, setBills] = useState([]);
+  const [charts, setCharts] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       try {
-        const [summaryRes, billsRes] = await Promise.all([
-          api.get("/bills/dashboard/summary"),
-          api.get("/bills"),
-        ]);
-        setSummary(summaryRes.data);
-        setBills(billsRes.data || []);
+        const summaryRes = await api.get("/bills/dashboard/summary");
+        setSummary(summaryRes.data.summary);
+        setCharts(summaryRes.data.charts);
       } catch (_) {
         setSummary(null);
-        setBills([]);
+        setCharts(null);
       } finally {
         setLoading(false);
       }
     }
     load();
   }, []);
-
-  const pendingInterest = useMemo(() => {
-    let total = 0;
-    bills.forEach((b) => {
-      if (
-        b.interestEnabled &&
-        (b.status === "unpaid" || b.status === "partial_paid")
-      ) {
-        total += b.calculatedInterest ?? 0;
-      }
-    });
-    return Number(total.toFixed(2));
-  }, [bills]);
-
-  const trendData = useMemo(() => {
-    const map = new Map();
-    bills.forEach((b) => {
-      const key = b.billDate ? b.billDate.slice(0, 10) : "Unknown";
-      const current = map.get(key) || { date: key, total: 0 };
-      current.total += b.totalPayable || b.amount || 0;
-      map.set(key, current);
-    });
-    return Array.from(map.values()).sort((a, b) => (a.date > b.date ? 1 : -1));
-  }, [bills]);
-
-  const sectionData = useMemo(() => {
-    const map = new Map();
-    bills.forEach((b) => {
-      const key = b.sectionId?.sectionName || "Other";
-      const current = map.get(key) || { section: key, total: 0 };
-      current.total += b.totalPayable || b.amount || 0;
-      map.set(key, current);
-    });
-    return Array.from(map.values()).sort((a, b) => b.total - a.total);
-  }, [bills]);
-
-  const paidVsUnpaidData = useMemo(() => {
-    let paid = 0;
-    let unpaid = 0;
-    bills.forEach((b) => {
-      if (b.status === "paid") {
-        paid += b.totalPayable || b.amount || 0;
-      } else {
-        unpaid += b.totalPayable || b.amount || 0;
-      }
-    });
-    return [
-      { name: "Paid", value: Number(paid.toFixed(2)) },
-      { name: "Unpaid", value: Number(unpaid.toFixed(2)) },
-    ];
-  }, [bills]);
-
-  const billsWithInterest = useMemo(() => {
-    return bills
-      .filter((b) => b.interestEnabled)
-      .map((b) => ({
-        title: b.title,
-        section: b.sectionId?.sectionName || "—",
-        principal: b.amount || 0,
-        interest: b.calculatedInterest ?? 0,
-        total: b.totalPayable ?? b.amount ?? 0,
-      }));
-  }, [bills]);
 
   if (loading) {
     return (
@@ -113,7 +47,7 @@ export function DashboardPage() {
     );
   }
 
-  if (!summary) {
+  if (!summary || !charts) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <p className="text-sm text-slate-500">
@@ -165,7 +99,7 @@ export function DashboardPage() {
         />
         <SummaryCard
           title="Pending Interest"
-          value={`₹ ${pendingInterest.toFixed(2)}`}
+          value={`₹ ${summary.pendingInterest.toFixed(2)}`}
           gradient="from-amber-500 to-amber-600"
         />
       </div>
@@ -183,7 +117,7 @@ export function DashboardPage() {
           </div>
           <div className="h-60">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendData}>
+              <LineChart data={charts.trendData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis
                   dataKey="date"
@@ -222,7 +156,7 @@ export function DashboardPage() {
             </h3>
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={sectionData}>
+                <BarChart data={charts.sectionData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis
                     dataKey="section"
@@ -255,7 +189,7 @@ export function DashboardPage() {
                 <PieChart>
                   <Pie
                     dataKey="value"
-                    data={paidVsUnpaidData}
+                    data={charts.paidVsUnpaidData}
                     cx="50%"
                     cy="50%"
                     outerRadius={60}
@@ -264,7 +198,7 @@ export function DashboardPage() {
                       `${name} ${(percent * 100).toFixed(0)}%`
                     }
                   >
-                    {paidVsUnpaidData.map((entry, index) => (
+                    {charts.paidVsUnpaidData.map((entry, index) => (
                       <Cell
                         key={entry.name}
                         fill={PIE_COLORS[index % PIE_COLORS.length]}
@@ -287,7 +221,7 @@ export function DashboardPage() {
       </div>
 
       {/* Interest per bill (from backend) */}
-      {billsWithInterest.length > 0 && (
+      {charts.billsWithInterest.length > 0 && (
         <div className="rounded-xl bg-white p-4 shadow-sm">
           <h3 className="text-sm font-semibold text-slate-900 mb-3">
             Interest till date (all bills with interest)
@@ -307,7 +241,7 @@ export function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {billsWithInterest.map((row, i) => (
+                {charts.billsWithInterest.map((row, i) => (
                   <tr key={i} className="border-b border-slate-100">
                     <td className="py-2 pr-3">
                       <span className="font-medium text-slate-800">

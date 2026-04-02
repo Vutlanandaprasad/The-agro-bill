@@ -9,6 +9,8 @@ function today() {
 export function BillsPage() {
   const [sections, setSections] = useState([]);
   const [bills, setBills] = useState([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [form, setForm] = useState(() => {
     const t = today();
     return {
@@ -52,24 +54,36 @@ export function BillsPage() {
       try {
         const [sectionsRes, billsRes] = await Promise.all([
           api.get("/sections"),
-          api.get("/bills"),
+          api.get("/bills", { params: { page: 1 } }),
         ]);
         setSections(sectionsRes.data || []);
-        setBills(billsRes.data || []);
+        if (billsRes.data && billsRes.data.bills) {
+          setBills(billsRes.data.bills);
+          setTotalPages(billsRes.data.pages || 1);
+        } else {
+          setBills(billsRes.data || []);
+        }
       } catch (_) {
         setSections([]);
         setBills([]);
+        setTotalPages(1);
       }
     }
     loadInitial();
   }, []);
 
-  async function loadBills() {
+  async function loadBills(currentPage = page) {
     try {
-      const res = await api.get("/bills");
-      setBills(res.data || []);
+      const res = await api.get("/bills", { params: { page: currentPage } });
+      if (res.data && res.data.bills) {
+        setBills(res.data.bills);
+        setTotalPages(res.data.pages || 1);
+      } else {
+        setBills(res.data || []);
+      }
     } catch (_) {
       setBills([]);
+      setTotalPages(1);
     }
   }
 
@@ -490,6 +504,13 @@ export function BillsPage() {
               </div>
             ))}
           </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100 mt-2">
+              <button disabled={page <= 1} onClick={() => { setPage(page-1); loadBills(page-1); }} className="text-xs font-semibold text-slate-600 disabled:opacity-40 hover:text-slate-900 transition">← Previous</button>
+              <span className="text-xs font-medium text-slate-500">Page {page} of {totalPages}</span>
+              <button disabled={page >= totalPages} onClick={() => { setPage(page+1); loadBills(page+1); }} className="text-xs font-semibold text-slate-600 disabled:opacity-40 hover:text-slate-900 transition">Next →</button>
+            </div>
+          )}
         </div>
       </div>
 
