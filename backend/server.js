@@ -53,3 +53,6 @@ app.get("/", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/sections", sectionRoutes);
 app.use("/api/bills", billRoutes);
+
+// Export the app for Vercel
+module.exports = app;

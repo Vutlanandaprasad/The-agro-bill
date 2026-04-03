@@ -29,7 +29,8 @@ export function DashboardPage() {
         const summaryRes = await api.get("/bills/dashboard/summary");
         setSummary(summaryRes.data.summary);
         setCharts(summaryRes.data.charts);
-      } catch (_) {
+      } catch (err) {
+        console.error("Dashboard error:", err);
         setSummary(null);
         setCharts(null);
       } finally {
