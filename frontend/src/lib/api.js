@@ -1,9 +1,9 @@
 import axios from 'axios';
 
-const _base = import.meta.env.VITE_API_URL || 'https://agro-wallet.onrender.com/';
+const _base = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'https://agro-wallet.onrender.com/');
 export const API_BASE_URL = _base.endsWith('/api') ? _base : _base.replace(/\/?$/, '') + '/api';
 /** Backend origin for full URLs (e.g. Google OAuth redirect) */
-export const BACKEND_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '') || 'https://agro-wallet.onrender.com/';
+export const BACKEND_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '') || (import.meta.env.PROD ? window.location.origin : 'https://agro-wallet.onrender.com/');
 
 let onAuthFailure = () => {};
 
