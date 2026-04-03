@@ -7,7 +7,8 @@ function buildCallbackURL() {
   let redirectUri = process.env.GOOGLE_REDIRECT_URI;
 
   if (!redirectUri || redirectUri.includes('5173')) {
-    return `${backendUrl}/api/auth/google/callback`;
+    if (backendUrl) return `${backendUrl}/api/auth/google/callback`;
+    return '/api/auth/google/callback';
   }
 
   return redirectUri;
@@ -26,7 +27,8 @@ if (!clientID || !clientSecret) {
       {
         clientID,
         clientSecret,
-        callbackURL: buildCallbackURL()
+        callbackURL: buildCallbackURL(),
+        proxy: true
       },
       async (accessToken, refreshToken, profile, done) => {
         try {

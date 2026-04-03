@@ -27,6 +27,13 @@ router.post('/forgot-password/reset', resetPasswordWithOtp);
 
 router.get(
   '/google',
+  (req, res, next) => {
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+      const frontendUrl = process.env.FRONTEND_URL || process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
+      return res.redirect(`${frontendUrl}?auth_error=google_not_configured_on_server`);
+    }
+    next();
+  },
   passport.authenticate('google', {
     scope: ['profile', 'email'],
     session: false
@@ -35,6 +42,13 @@ router.get(
 
 router.get(
   '/google/callback',
+  (req, res, next) => {
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+      const frontendUrl = process.env.FRONTEND_URL || process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
+      return res.redirect(`${frontendUrl}?auth_error=google_not_configured_on_server`);
+    }
+    next();
+  },
   passport.authenticate('google', {
     session: false,
     failureRedirect: `${
